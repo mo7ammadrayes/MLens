@@ -1,0 +1,79 @@
+# =========================
+# macOS
+# =========================
+.DS_Store
+**/.DS_Store
+
+
+# =========================
+# Environment / secrets
+# =========================
+.env
+.env.*
+!.env.example
+
+.venv/
+venv/
+
+
+# =========================
+# Python
+# =========================
+__pycache__/
+*.py[cod]
+*.pyo
+
+/backend/prediction_testing.py
+/backend/database/test_connection.py
+# =========================
+# IDE / editor
+# =========================
+.vscode/
+.idea/
+# Legacy local SQLite code/data
+/database/
+
+# =========================
+# Personal learning / manual testing
+# =========================
+/learning.py
+/ml_testing.py
+/apis_tests.py
+
+
+# =========================
+# Saved ML model artifacts
+# =========================
+*.joblib
+/artifacts/
+
+
+# =========================
+# Local datasets
+# =========================
+/data/
+
+
+# =========================
+# Azure / Azurite local storage
+# =========================
+/__azurite_db_*.json
+/__blobstorage__/
+/__queuestorage__/
+/__tablestorage__/
+
+
+# =========================
+# Local databases
+# =========================
+*.db
+*.sqlite
+*.sqlite3
+
+# Local datasets
+/data/
+
+# Personal learning / manual testing
+/learning.py
+/ml_testing.py
+/apis_tests.py

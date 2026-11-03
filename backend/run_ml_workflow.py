@@ -48,6 +48,7 @@ def train_and_save_model(
     missing_strategy="impute",
     task_type="classification",
     model_parameters=None,
+    is_public=None,
 ):
     
     dataset = get_dataset_by_id(db, dataset_id)
@@ -104,6 +105,7 @@ def train_and_save_model(
         user_id=user_id,
         target=experiment["target"],
         features=experiment["features"],
+        is_public=is_public,
     )
 
     experiment_id = saved_experiment.experiment_id
@@ -164,6 +166,7 @@ def train_and_save_model(
     return {
         "experiment_id": experiment_id,
         "model_id": model_id,
+        "is_public": saved_experiment.is_public,
         "results": experiment["results"],
     }
 

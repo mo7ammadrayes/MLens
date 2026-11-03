@@ -1,10 +1,10 @@
-from backend.features.user.schemas import AddUser, UpdateUser
+from backend.features.user.schemas import UpdateUser
 from backend.features.dataset.schemas import AddDataset, UpdateDataset
 from backend.features.experiment.schemas import AddExperiment
-from backend.features.model.schemas import TrainModelRequest, PredictRequest
+from backend.features.model.schemas import TrainModelRequest
+from backend.features.prediction.schemas import PredictRequest
 
 __all__ = [
-    "AddUser",
     "UpdateUser",
     "AddDataset",
     "UpdateDataset",

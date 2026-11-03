@@ -107,6 +107,8 @@ def clean_and_save_dataset(
         original_filename=f"cleaned_dataset_{dataset_id}.csv",
         contents=contents,
         cleaning_metadata=metadata,
+        # A cleaned copy keeps the source dataset's visibility.
+        is_public=source.is_public,
     )
 
     return {
@@ -114,5 +116,6 @@ def clean_and_save_dataset(
         "name": saved.name,
         "rows": saved.rows,
         "cols": saved.cols,
+        "is_public": saved.is_public,
         "cleaning_metadata": metadata,
     }

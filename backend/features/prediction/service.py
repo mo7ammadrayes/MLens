@@ -1,3 +1,4 @@
+from sqlalchemy import select
 import pandas as pd
 from sqlalchemy.orm import Session
 
@@ -206,6 +207,19 @@ def predict_dataset(
         "prediction_column": prediction_column,
         "predictions": predictions.tolist(),
     }
+
+def get_user_prediction_results(
+    db: Session,
+    user_id: int,
+) -> list[PredictionResult]:
+    return list(
+        db.scalars(
+            select(PredictionResult)
+            .where(PredictionResult.user_id == user_id)
+            .order_by(PredictionResult.prediction_result_id.desc())
+        ).all()
+    )
+
 
 def download_prediction_result(
     db: Session,

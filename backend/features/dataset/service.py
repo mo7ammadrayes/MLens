@@ -60,6 +60,16 @@ def get_dataset_by_id(db: Session, dataset_id: int) -> Dataset | None:
 
 def get_all_datasets(db: Session) -> list[Dataset]:
     return db.scalars(select(Dataset)).all()
+
+
+def get_user_datasets(db: Session, user_id: int) -> list[Dataset]:
+    return list(
+        db.scalars(
+            select(Dataset)
+            .where(Dataset.added_by == user_id)
+            .order_by(Dataset.dataset_id.desc())
+        ).all()
+    )
 def create_dataset(
     db: Session,
     name: str,
@@ -70,8 +80,12 @@ def create_dataset(
     storage_bucket: str,
     storage_path: str,
     cleaning_metadata: dict | None = None,
+    is_public: bool = True,
+    description: str | None = None,
 ) -> Dataset:
     dataset = Dataset(
+        is_public=is_public,
+        description=description,
         name=name,
         rows=rows,
         cols=cols,
@@ -164,6 +178,8 @@ def upload_dataset(
     original_filename: str,
     contents: bytes,
     cleaning_metadata: dict | None = None,
+    is_public: bool = True,
+    description: str | None = None,
 ) -> Dataset:
     name = name.strip()
 
@@ -210,6 +226,8 @@ def upload_dataset(
             storage_bucket=bucket,
             storage_path=storage_path,
             cleaning_metadata=cleaning_metadata,
+            is_public=is_public,
+            description=description,
         )
     except Exception:
         try:

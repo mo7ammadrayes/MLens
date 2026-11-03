@@ -7,9 +7,9 @@ class AddExperiment(BaseModel):
     parameters: dict
     results: dict
     dataset_id: PositiveInt
-    user_id: PositiveInt
     target: str
     features: list[str] = Field(min_length=1)
+    is_public: bool | None = None
 
 
 class CompareExperimentsRequest(BaseModel):
@@ -17,3 +17,6 @@ class CompareExperimentsRequest(BaseModel):
         min_length=2,
         max_length=10,
     )
+
+class UpdateExperiment(BaseModel):
+    is_public: bool

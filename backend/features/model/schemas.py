@@ -4,7 +4,6 @@ from pydantic import BaseModel, Field, PositiveInt
 
 
 class TrainModelRequest(BaseModel):
-    user_id: PositiveInt
     dataset_id: PositiveInt
     target: str
     features: list[str] = Field(min_length=1)
@@ -13,6 +12,8 @@ class TrainModelRequest(BaseModel):
     task_type: Literal["classification", "regression"] = "classification"
     algorithm: str
     save_model: bool = False
+    # None: follow the dataset's visibility.
+    is_public: bool | None = None
     numerical_strategy: Literal["mean", "median"] = "median"
     drop_duplicates: bool = False
     missing_strategy: Literal["impute", "drop_rows"] = "impute"

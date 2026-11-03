@@ -1,6 +1,8 @@
 from datetime import datetime
 
-from sqlalchemy import DateTime, String, func
+import uuid
+
+from sqlalchemy import DateTime, String, Uuid, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from backend.database.base import Base
@@ -15,6 +17,13 @@ class User(Base):
         String,
         nullable=False,
         unique=True,
+    )
+    # Supabase Auth user id (auth.users.id); null for legacy rows
+    # until their owner first signs in.
+    auth_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid,
+        unique=True,
+        nullable=True,
     )
     phone: Mapped[str | None] = mapped_column(
         String,

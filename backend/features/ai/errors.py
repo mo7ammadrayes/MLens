@@ -1,0 +1,2 @@
+class UnsupportedRecommendationError(ValueError):
+    pass

@@ -33,9 +33,11 @@ class PredictionResult(Base):
         nullable=False,
     )
 
-    model_id: Mapped[int] = mapped_column(
-        ForeignKey("models.model_id", ondelete="RESTRICT"),
-        nullable=False,
+    # Null once the (possibly another user's public) model is deleted;
+    # the stored prediction CSV is kept.
+    model_id: Mapped[int | None] = mapped_column(
+        ForeignKey("models.model_id", ondelete="SET NULL"),
+        nullable=True,
     )
 
     dataset_id: Mapped[int] = mapped_column(

@@ -14,10 +14,22 @@ class AddDataset(BaseModel):
 
 class UpdateDataset(BaseModel):
     name: str | None = Field(default=None, min_length=1)
+    is_public: bool | None = None
+    description: str | None = Field(default=None, max_length=2000)
+    source: str | None = Field(default=None, max_length=500)
+    tags: list[str] | None = Field(default=None, max_length=8)
+
+
+class CopyDatasetRequest(BaseModel):
+    name: str = Field(min_length=1)
+    # Copies are private unless the user chooses to share them.
+    is_public: bool = False
 
 class CleanDatasetRequest(BaseModel):
-    user_id: PositiveInt
     name: str = Field(min_length=1)
     drop_duplicates: bool = False
     missing_strategy: Literal["none", "drop", "mean", "median"] = "none"
     columns: list[str] | None = Field(default=None, min_length=1)
+
+class UnsupportedRecommendationError(ValueError):
+    pass

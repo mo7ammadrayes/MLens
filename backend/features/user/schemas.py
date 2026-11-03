@@ -1,13 +1,7 @@
-from pydantic import BaseModel, EmailStr
-
-
-class AddUser(BaseModel):
-    name: str
-    email: EmailStr
-    phone: str | None = None
+from pydantic import BaseModel, Field
 
 
 class UpdateUser(BaseModel):
-    name: str | None = None
-    email: EmailStr | None = None
+    # Email is owned by Supabase Auth and changed there.
+    name: str | None = Field(default=None, min_length=1)
     phone: str | None = None

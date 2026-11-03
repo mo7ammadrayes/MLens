@@ -1,0 +1,88 @@
+{
+  "curator": {
+    "name": "MLens",
+    "email": "curated@mlens.invalid"
+  },
+  "datasets": [
+    {
+      "file": "palmer_penguins.csv",
+      "name": "Palmer Penguins",
+      "description": "Body measurements of three penguin species observed on three islands in the Palmer Archipelago, Antarctica. Includes text columns and a few missing values, which makes it a good first classification dataset.",
+      "source": "Gorman, Williams & Fraser (2014), Palmer Station LTER. Distributed in the palmerpenguins package, CC0.",
+      "tags": ["multiclass classification", "categorical features", "missing values", "biology"],
+      "examples": [
+        {"target": "species", "task_type": "classification", "algorithm": "Logistic Regression", "features": ["island", "bill_length_mm", "bill_depth_mm", "flipper_length_mm", "body_mass_g", "sex"], "categorical": ["island", "sex"]},
+        {"target": "species", "task_type": "classification", "algorithm": "Random Forest", "features": ["island", "bill_length_mm", "bill_depth_mm", "flipper_length_mm", "body_mass_g", "sex"], "categorical": ["island", "sex"]},
+        {"target": "species", "task_type": "classification", "algorithm": "Decision Tree", "features": ["island", "bill_length_mm", "bill_depth_mm", "flipper_length_mm", "body_mass_g", "sex"], "categorical": ["island", "sex"], "parameters": {"max_depth": 3}}
+      ]
+    },
+    {
+      "file": "breast_cancer_wisconsin.csv",
+      "name": "Breast Cancer Wisconsin (Diagnostic)",
+      "description": "Thirty measurements computed from digitised images of breast-mass cell nuclei, labelled malignant or benign. All features are numeric and there are no missing values.",
+      "source": "Wolberg, Street & Mangasarian, UCI Machine Learning Repository, CC BY 4.0.",
+      "tags": ["binary classification", "numeric features", "medical"],
+      "examples": [
+        {"target": "diagnosis", "task_type": "classification", "algorithm": "Logistic Regression", "features": "all"},
+        {"target": "diagnosis", "task_type": "classification", "algorithm": "Gradient Boosting", "features": "all"},
+        {"target": "diagnosis", "task_type": "classification", "algorithm": "Decision Tree", "features": "all", "parameters": {"max_depth": 4}}
+      ]
+    },
+    {
+      "file": "wine.csv",
+      "name": "Wine Recognition",
+      "description": "Chemical analysis of 178 wines grown in the same region of Italy by three different cultivars. A small, clean multiclass problem.",
+      "source": "Forina et al., UCI Machine Learning Repository, CC BY 4.0.",
+      "tags": ["multiclass classification", "numeric features", "small"],
+      "examples": [
+        {"target": "cultivar", "task_type": "classification", "algorithm": "Logistic Regression", "features": "all"},
+        {"target": "cultivar", "task_type": "classification", "algorithm": "Random Forest", "features": "all"}
+      ]
+    },
+    {
+      "file": "diabetes_progression.csv",
+      "name": "Diabetes Progression",
+      "description": "Age, sex, BMI, blood pressure and six blood serum measurements for 442 diabetes patients. The target is a quantitative measure of disease progression one year later.",
+      "source": "Efron, Hastie, Johnstone & Tibshirani (2004), Least Angle Regression. Distributed with scikit-learn.",
+      "tags": ["regression", "numeric features", "medical"],
+      "examples": [
+        {"target": "progression", "task_type": "regression", "algorithm": "Linear Regression", "features": "all"},
+        {"target": "progression", "task_type": "regression", "algorithm": "Random Forest", "features": "all"},
+        {"target": "progression", "task_type": "regression", "algorithm": "Gradient Boosting", "features": "all", "parameters": {"n_estimators": 150, "learning_rate": 0.05}}
+      ]
+    },
+    {
+      "file": "auto_mpg.csv",
+      "name": "Auto MPG",
+      "description": "Fuel economy, engine size, weight and origin of cars from 1970 to 1982. Horsepower has missing values, and the car name column is free text that should not be used as a feature.",
+      "source": "Quinlan (1993), StatLib, via UCI Machine Learning Repository (CC BY 4.0) and vega-datasets. Rows with no MPG value removed.",
+      "tags": ["regression", "categorical features", "missing values", "automotive"],
+      "examples": [
+        {"target": "Miles_per_Gallon", "task_type": "regression", "algorithm": "Linear Regression", "features": ["Cylinders", "Displacement", "Horsepower", "Weight_in_lbs", "Acceleration", "Year", "Origin"], "categorical": ["Origin"]},
+        {"target": "Miles_per_Gallon", "task_type": "regression", "algorithm": "Gradient Boosting", "features": ["Cylinders", "Displacement", "Horsepower", "Weight_in_lbs", "Acceleration", "Year", "Origin"], "categorical": ["Origin"]}
+      ]
+    },
+    {
+      "file": "seattle_weather.csv",
+      "name": "Seattle Weather",
+      "description": "Daily precipitation, temperature range and wind in Seattle from 2012 to 2015, with the day's weather type. The classes are imbalanced: snow and drizzle are rare.",
+      "source": "NOAA daily climate records, via vega-datasets.",
+      "tags": ["multiclass classification", "imbalanced classes", "time series", "weather"],
+      "examples": [
+        {"target": "weather", "task_type": "classification", "algorithm": "Random Forest", "features": ["precipitation", "temp_max", "temp_min", "wind"]},
+        {"target": "weather", "task_type": "classification", "algorithm": "Gradient Boosting", "features": ["precipitation", "temp_max", "temp_min", "wind"]}
+      ]
+    },
+    {
+      "file": "iris.csv",
+      "name": "Iris",
+      "description": "Sepal and petal measurements of 150 iris flowers from three species. The classic first dataset in machine learning.",
+      "source": "Fisher (1936), UCI Machine Learning Repository, CC BY 4.0.",
+      "tags": ["multiclass classification", "numeric features", "small"],
+      "examples": [
+        {"target": "species", "task_type": "classification", "algorithm": "Logistic Regression", "features": "all"},
+        {"target": "species", "task_type": "classification", "algorithm": "Decision Tree", "features": "all", "parameters": {"max_depth": 3}}
+      ]
+    }
+  ]
+}

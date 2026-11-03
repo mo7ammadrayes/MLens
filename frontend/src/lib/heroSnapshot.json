@@ -1,0 +1,96 @@
+{
+ "_note": "Snapshot of a real curated example run (Palmer Penguins, Decision Tree, random_state=42), saved so the landing page renders instantly without API calls. Regenerate if the curated examples change.",
+ "dataset": {
+  "name": "Palmer Penguins",
+  "rows": 344,
+  "cols": 8
+ },
+ "experiment": {
+  "algorithm": "Decision Tree",
+  "target": "species",
+  "features": [
+   "island",
+   "bill_length_mm",
+   "bill_depth_mm",
+   "flipper_length_mm",
+   "body_mass_g",
+   "sex"
+  ],
+  "train_size": 0.8,
+  "categorical_features": [
+   "island",
+   "sex"
+  ],
+  "missing_strategy": "impute",
+  "accuracy": 0.971,
+  "macro_f1": 0.97,
+  "classes": [
+   [
+    "Adelie",
+    0.9667
+   ],
+   [
+    "Chinstrap",
+    0.963
+   ],
+   [
+    "Gentoo",
+    0.9804
+   ]
+  ]
+ },
+ "preview": {
+  "columns": [
+   "species",
+   "island",
+   "bill_length_mm",
+   "bill_depth_mm",
+   "flipper_length_mm",
+   "body_mass_g",
+   "sex",
+   "year"
+  ],
+  "rows": [
+   [
+    "Adelie",
+    "Torgersen",
+    39.1,
+    18.7,
+    181.0,
+    3750.0,
+    "male",
+    2007
+   ],
+   [
+    "Adelie",
+    "Torgersen",
+    null,
+    null,
+    null,
+    null,
+    null,
+    2007
+   ],
+   [
+    "Adelie",
+    "Torgersen",
+    39.5,
+    17.4,
+    186.0,
+    3800.0,
+    "female",
+    2007
+   ],
+   [
+    "Adelie",
+    "Torgersen",
+    34.1,
+    18.1,
+    193.0,
+    3475.0,
+    null,
+    2007
+   ]
+  ]
+ }
+}

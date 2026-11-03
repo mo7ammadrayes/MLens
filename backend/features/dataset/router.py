@@ -1,3 +1,6 @@
+import logging
+from collections import OrderedDict
+
 from fastapi import (
     APIRouter,
     Depends,
@@ -6,36 +9,114 @@ from fastapi import (
     HTTPException,
     UploadFile,
 )
+from fastapi.responses import Response
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
+
+from backend.auth.dependencies import CurrentUser, OptionalUser
+from backend.auth.ownership import readable_dataset, require_dataset
+from backend.database.session import get_db
+from backend.features.user.model import User
+from backend.features.ai.http_errors import handle_ai_errors
+from backend.features.ai.schemas import Explanation
+from backend.features.ai.service import explain_dataset_context
+from backend.features.dataset.cleaning_service import (
+    clean_and_save_dataset,
+)
+from backend.features.dataset.schemas import (
+    CleanDatasetRequest,
+    CopyDatasetRequest,
+    UpdateDataset,
+)
+from backend.features.dataset.service import (
+    MAX_CSV_SIZE,
+    delete_dataset_db,
+    get_user_datasets,
+    update_dataset_db,
+    upload_dataset,
+)
 from backend.services.data_analysis_service import (
     inspect_dataset,
     load_dataset_by_id,
 )
-from backend.database.session import get_db
-from backend.features.dataset.schemas import  UpdateDataset,CleanDatasetRequest,AddDataset
-from backend.features.dataset.service import (
-    MAX_CSV_SIZE,
-    upload_dataset,
-    get_dataset_by_id,
-    get_all_datasets,
-    update_dataset_db,
-    delete_dataset_db,
-)
-from backend.features.dataset.cleaning_service import (
-    clean_and_save_dataset,
-)
-
-from fastapi.responses import Response
 from backend.storage.service import download_file
+
+logger = logging.getLogger(__name__)
+
+PREVIEW_ROWS = 15
 
 router = APIRouter(prefix="/datasets", tags=["Datasets"])
 
+
+def dataset_response(dataset):
+    return {
+        "dataset_id": dataset.dataset_id,
+        "name": dataset.name,
+        "rows": dataset.rows,
+        "cols": dataset.cols,
+        "added_by": dataset.added_by,
+        "original_filename": dataset.original_filename,
+        "created_at": dataset.created_at,
+        "is_public": dataset.is_public,
+        "is_featured": dataset.is_featured,
+        "description": dataset.description,
+        "source": dataset.source,
+        "tags": dataset.tags or [],
+        "cleaning_metadata": dataset.cleaning_metadata,
+    }
+
+
+# Stored datasets never change (cleaning and copying create new rows), so
+# inspection and preview results can be cached per dataset_id. This keeps
+# public Discover pages from downloading the CSV on every visit.
+_INSPECTION_CACHE: OrderedDict[int, dict] = OrderedDict()
+_PREVIEW_CACHE: OrderedDict[int, dict] = OrderedDict()
+_CACHE_SIZE = 64
+
+
+def _cached(cache: OrderedDict, key: int, compute):
+    if key in cache:
+        cache.move_to_end(key)
+        return cache[key]
+    value = compute()
+    cache[key] = value
+    if len(cache) > _CACHE_SIZE:
+        cache.popitem(last=False)
+    return value
+
+
+def _load_errors(compute):
+    try:
+        return compute()
+    except LookupError as error:
+        raise HTTPException(404, str(error)) from error
+    except ValueError as error:
+        raise HTTPException(422, str(error)) from error
+    except FileNotFoundError as error:
+        raise HTTPException(
+            500,
+            "The registered dataset file is missing",
+        ) from error
+
+
+def _preview(df, rows: int = PREVIEW_ROWS) -> dict:
+    head = df.head(rows)
+    # JSON has no NaN: send missing cells as null.
+    head = head.astype(object).where(head.notna(), None)
+    return {
+        "columns": df.columns.tolist(),
+        "rows": head.values.tolist(),
+        "total_rows": int(len(df)),
+    }
+
+
 @router.post("", status_code=201)
 def adding_dataset(
+    user: CurrentUser,
     name: str = Form(..., min_length=1),
-    added_by: int = Form(..., gt=0),
     file: UploadFile = File(...),
+    is_public: bool = Form(True),
+    description: str | None = Form(None, max_length=2000),
     db: Session = Depends(get_db),
 ):
     try:
@@ -54,9 +135,11 @@ def adding_dataset(
         saved_dataset = upload_dataset(
             db=db,
             name=name,
-            added_by=added_by,
+            added_by=user.user_id,
             original_filename=file.filename or "",
             contents=contents,
+            is_public=is_public,
+            description=(description or "").strip() or None,
         )
     except FileExistsError as error:
         raise HTTPException(409, str(error)) from error
@@ -65,79 +148,46 @@ def adding_dataset(
     except ValueError as error:
         raise HTTPException(422, str(error)) from error
     except IntegrityError as error:
-        code = getattr(error.orig, "sqlstate", None)
-
-        if code == "23505":
+        if getattr(error.orig, "sqlstate", None) == "23505":
             raise HTTPException(
                 409,
                 "Dataset name or storage location already registered",
             ) from error
-
-        if code == "23503":
-            raise HTTPException(
-                422,
-                "Dataset owner does not exist",
-            ) from error
-
         raise
 
-    return {
-        "dataset_id": saved_dataset.dataset_id,
-        "name": saved_dataset.name,
-        "rows": saved_dataset.rows,
-        "cols": saved_dataset.cols,
-        "added_by": saved_dataset.added_by,
-        "original_filename": saved_dataset.original_filename,
-        "created_at": saved_dataset.created_at,
-    }
+    return dataset_response(saved_dataset)
+
+
+@router.get("")
+def get_datasets(user: CurrentUser, db: Session = Depends(get_db)):
+    return [
+        dataset_response(dataset)
+        for dataset in get_user_datasets(db, user.user_id)
+    ]
 
 
 @router.get("/{dataset_id}")
 def get_dataset(
     dataset_id: int,
+    user: OptionalUser,
     db: Session = Depends(get_db),
 ):
-    dataset = get_dataset_by_id(db, dataset_id)
-
-    if dataset is None:
-        raise HTTPException(
-            status_code=404,
-            detail="Dataset not found",
-        )
-
+    dataset = readable_dataset(db, dataset_id, user)
+    owner = db.get(User, dataset.added_by)
     return {
-        "dataset_id": dataset.dataset_id,
-        "name": dataset.name,
-        "rows": dataset.rows,
-        "cols": dataset.cols,
-        "added_by": dataset.added_by,
+        **dataset_response(dataset),
+        "owner_name": owner.name if owner else None,
     }
-
-
-@router.get("")
-def get_datasets(db: Session = Depends(get_db)):
-    datasets = get_all_datasets(db)
-    final_results = []
-
-    for dataset in datasets:
-        result = {
-            "dataset_id": dataset.dataset_id,
-            "name": dataset.name,
-            "rows": dataset.rows,
-            "cols": dataset.cols,
-            "added_by": dataset.added_by,
-        }
-        final_results.append(result)
-
-    return final_results
 
 
 @router.patch("/{dataset_id}")
 def update_dataset(
     dataset_id: int,
     dataset: UpdateDataset,
+    user: CurrentUser,
     db: Session = Depends(get_db),
 ):
+    require_dataset(db, dataset_id, user)
     changes = dataset.model_dump(exclude_unset=True)
 
     if not changes:
@@ -146,11 +196,20 @@ def update_dataset(
             detail="No fields provided for update",
         )
 
-    if changes.get("name", "") is None:
-        raise HTTPException(
-            status_code=422,
-            detail="Dataset name cannot be null",
-        )
+    if "tags" in changes and changes["tags"] is not None:
+        changes["tags"] = [
+            tag.strip()[:40] for tag in changes["tags"] if tag.strip()
+        ]
+    for field in ("description", "source"):
+        if field in changes and changes[field] is not None:
+            changes[field] = changes[field].strip() or None
+
+    for field in ("name", "is_public"):
+        if field in changes and changes[field] is None:
+            raise HTTPException(
+                status_code=422,
+                detail=f"Dataset {field} cannot be null",
+            )
 
     try:
         updated_dataset = update_dataset_db(db, dataset_id, changes)
@@ -173,11 +232,15 @@ def update_dataset(
         "updated_fields": changes,
     }
 
+
 @router.delete("/{dataset_id}")
 def delete_dataset(
     dataset_id: int,
+    user: CurrentUser,
     db: Session = Depends(get_db),
 ):
+    require_dataset(db, dataset_id, user)
+
     try:
         result = delete_dataset_db(db, dataset_id)
     except ValueError as error:
@@ -190,8 +253,9 @@ def delete_dataset(
             raise HTTPException(
                 status_code=409,
                 detail=(
-                "Cannot delete a dataset referenced by "
-                "experiments or prediction results"),
+                    "Cannot delete a dataset referenced by "
+                    "experiments or prediction results"
+                ),
             ) from error
         raise
 
@@ -204,45 +268,63 @@ def delete_dataset(
     message = "Dataset and stored CSV deleted successfully"
 
     if result["file_cleanup_pending"]:
-        message = (
-            "Dataset deleted; stored CSV cleanup is pending"
-        )
+        message = "Dataset deleted; stored CSV cleanup is pending"
 
     return {
         "message": message,
         **result,
     }
 
+
 @router.get("/{dataset_id}/inspect")
 def inspect_dataset_endpoint(
     dataset_id: int,
+    user: OptionalUser,
     db: Session = Depends(get_db),
 ):
-    try:
-        df = load_dataset_by_id(db, dataset_id)
-        return inspect_dataset(df)
-    except LookupError as error:
-        raise HTTPException(404, str(error)) from error
-    except ValueError as error:
-        raise HTTPException(422, str(error)) from error
-    except FileNotFoundError as error:
-        raise HTTPException(
-            500,
-            "The registered dataset file is missing",
-        ) from error
-    
+    readable_dataset(db, dataset_id, user)
+
+    return _cached(
+        _INSPECTION_CACHE,
+        dataset_id,
+        lambda: _load_errors(
+            lambda: inspect_dataset(load_dataset_by_id(db, dataset_id))
+        ),
+    )
+
+
+@router.get("/{dataset_id}/preview")
+def preview_dataset(
+    dataset_id: int,
+    user: OptionalUser,
+    db: Session = Depends(get_db),
+):
+    """The first rows of a readable dataset."""
+    readable_dataset(db, dataset_id, user)
+
+    return _cached(
+        _PREVIEW_CACHE,
+        dataset_id,
+        lambda: _load_errors(
+            lambda: _preview(load_dataset_by_id(db, dataset_id))
+        ),
+    )
+
 
 @router.post("/{dataset_id}/clean", status_code=201)
 def clean_dataset(
     dataset_id: int,
     request: CleanDatasetRequest,
+    user: CurrentUser,
     db: Session = Depends(get_db),
 ):
+    require_dataset(db, dataset_id, user)
+
     try:
         return clean_and_save_dataset(
             db=db,
             dataset_id=dataset_id,
-            user_id=request.user_id,
+            user_id=user.user_id,
             name=request.name,
             drop_duplicates=request.drop_duplicates,
             missing_strategy=request.missing_strategy,
@@ -275,15 +357,10 @@ def clean_dataset(
 @router.get("/{dataset_id}/download")
 def download_dataset(
     dataset_id: int,
+    user: CurrentUser,
     db: Session = Depends(get_db),
 ):
-    dataset = get_dataset_by_id(db, dataset_id)
-
-    if dataset is None:
-        raise HTTPException(
-            status_code=404,
-            detail="Dataset not found",
-        )
+    dataset = readable_dataset(db, dataset_id, user)
 
     if dataset.storage_bucket != "datasets":
         raise HTTPException(
@@ -306,3 +383,76 @@ def download_dataset(
             ),
         },
     )
+
+
+@router.post("/{dataset_id}/explanation", response_model=Explanation)
+def explain_dataset(
+    dataset_id: int,
+    user: CurrentUser,
+    db: Session = Depends(get_db),
+):
+    readable_dataset(db, dataset_id, user)
+
+    # Inspection facts only: the raw rows are never sent to the model.
+    context = _cached(
+        _INSPECTION_CACHE,
+        dataset_id,
+        lambda: _load_errors(
+            lambda: inspect_dataset(load_dataset_by_id(db, dataset_id))
+        ),
+    )
+
+    # The shared helper handles AI failures.
+    with handle_ai_errors("Dataset explanation"):
+        return explain_dataset_context(context)
+
+
+@router.post("/{dataset_id}/copy", status_code=201)
+def copy_dataset(
+    dataset_id: int,
+    request: CopyDatasetRequest,
+    user: CurrentUser,
+    db: Session = Depends(get_db),
+):
+    """Copy a readable (e.g. another user's public) dataset into your account
+    so it can be cleaned and used for training."""
+    source = readable_dataset(db, dataset_id, user)
+
+    if source.storage_bucket != "datasets":
+        raise HTTPException(422, "Only hosted datasets can be copied")
+
+    contents = download_file(
+        bucket=source.storage_bucket,
+        path=source.storage_path,
+    )
+
+    try:
+        saved = upload_dataset(
+            db=db,
+            name=request.name,
+            added_by=user.user_id,
+            original_filename=source.original_filename,
+            contents=contents,
+            is_public=request.is_public,
+            description=source.description,
+        )
+    except FileExistsError as error:
+        raise HTTPException(409, str(error)) from error
+    except LookupError as error:
+        raise HTTPException(404, str(error)) from error
+    except ValueError as error:
+        raise HTTPException(422, str(error)) from error
+    except IntegrityError as error:
+        if getattr(error.orig, "sqlstate", None) == "23505":
+            raise HTTPException(
+                409,
+                "Dataset name or storage location already registered",
+            ) from error
+        raise
+
+    # Keep attribution with the copy; it is never featured.
+    saved.source = source.source or f"Copied from {source.name} (dataset #{source.dataset_id})"
+    saved.tags = source.tags
+    db.commit()
+    db.refresh(saved)
+    return dataset_response(saved)

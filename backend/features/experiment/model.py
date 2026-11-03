@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import JSON, DateTime, ForeignKey, String, func
+from sqlalchemy import JSON, Boolean, DateTime, ForeignKey, String, func, true
 from sqlalchemy.orm import Mapped, mapped_column
 
 from backend.database.base import Base
@@ -40,6 +40,14 @@ class Experiment(Base):
     user_id: Mapped[int] = mapped_column(
         ForeignKey("users.user_id", ondelete="RESTRICT"),
         nullable=False,
+    )
+
+    # Saved models inherit this visibility.
+    is_public: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        default=True,
+        server_default=true(),
     )
 
     created_at: Mapped[datetime] = mapped_column(

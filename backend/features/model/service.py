@@ -20,6 +20,17 @@ def get_all_models(db: Session) -> list[Model]:
     )
 
 
+def get_user_models(db: Session, user_id: int) -> list[Model]:
+    return list(
+        db.scalars(
+            select(Model)
+            .join(Experiment, Experiment.experiment_id == Model.experiment_id)
+            .where(Experiment.user_id == user_id)
+            .order_by(Model.model_id)
+        ).all()
+    )
+
+
 def create_model(
     db: Session,
     *,

@@ -20,6 +20,44 @@ def get_all_experiments(db: Session) -> list[Experiment]:
         ).all()
     )
 
+def get_user_experiments(db: Session, user_id: int) -> list[Experiment]:
+    return list(
+        db.scalars(
+            select(Experiment)
+            .where(Experiment.user_id == user_id)
+            .order_by(Experiment.experiment_id)
+        ).all()
+    )
+
+
+def get_related_experiments(
+    db: Session,
+    experiment: Experiment,
+    public_only: bool = False,
+) -> list[Experiment]:
+    task_type = experiment.parameters.get("task_type")
+
+    if not task_type:
+        raise ValueError("Experiment task type is missing")
+
+    candidates = db.scalars(
+        select(Experiment)
+        .where(
+            Experiment.dataset_id == experiment.dataset_id,
+            Experiment.user_id == experiment.user_id,
+            Experiment.target == experiment.target,
+            Experiment.experiment_id != experiment.experiment_id,
+        )
+        .order_by(Experiment.experiment_id)
+    ).all()
+
+    return [
+        candidate
+        for candidate in candidates
+        if candidate.parameters.get("task_type") == task_type
+        and (candidate.is_public or not public_only)
+    ]
+
 
 def create_experiment(
     db: Session,
@@ -32,6 +70,7 @@ def create_experiment(
     user_id: int,
     target: str,
     features: list[str],
+    is_public: bool | None = None,
 ) -> Experiment:
     dataset = db.get(Dataset, dataset_id)
 
@@ -53,6 +92,8 @@ def create_experiment(
         user_id=user_id,
         target=target,
         features=features,
+        # Results default to the dataset's visibility.
+        is_public=dataset.is_public if is_public is None else is_public,
     )
 
     try:

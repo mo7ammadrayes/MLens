@@ -39,6 +39,11 @@ def inspect_dataset(df):
         "column_names": df.columns.tolist(),
         "column_types": df.dtypes.astype(str).to_dict(),
         "missing_values": df.isna().sum().to_dict(),
+        # Distinct non-missing values per column; lets the UI spot ID-like
+        # and high-cardinality columns before they are one-hot encoded.
+        "unique_values": {
+            column: int(count) for column, count in df.nunique().items()
+        },
         "total_missing_values": int(df.isna().sum().sum()),
         "duplicate_rows": int(df.duplicated().sum()),
     }

@@ -44,6 +44,8 @@ export interface DatasetInspection {
   column_names: string[];
   column_types: Record<string, string>;
   missing_values: Record<string, number>;
+  /** Distinct non-missing values per column (older APIs may omit it). */
+  unique_values?: Record<string, number>;
   total_missing_values: number;
   duplicate_rows: number;
 }
@@ -133,6 +135,8 @@ export interface TrainModelResponse {
   experiment_id: number;
   model_id: number | null;
   is_public: boolean;
+  /** Set when saving was requested but the model could not be stored. */
+  model_error: string | null;
   results: ExperimentResults;
 }
 

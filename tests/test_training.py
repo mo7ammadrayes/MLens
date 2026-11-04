@@ -84,3 +84,73 @@ def test_deleting_a_model_removes_its_artifact(client, alice, storage):
     assert client.delete(f"/models/{model_id}", headers=alice).status_code == 200
     assert len(storage.files) == artifacts_before - 1
     assert client.get(f"/models/{model_id}", headers=alice).status_code == 404
+
+
+def test_model_too_large_for_storage_keeps_experiment_and_explains(client, alice, storage, monkeypatch):
+    from storage3.exceptions import StorageApiError
+
+    dataset_id = upload(client, alice).json()["dataset_id"]
+    real_from = storage.from_
+
+    def reject_models(bucket):
+        target = real_from(bucket)
+        if bucket == "models":
+            def too_large(path, file, file_options=None):
+                raise StorageApiError(
+                    "The object exceeded the maximum allowed size", "Payload too large", 413,
+                )
+            target.upload = too_large
+        return target
+
+    monkeypatch.setattr(storage, "from_", reject_models)
+
+    response = train(client, alice, dataset_id, save_model=True)
+
+    assert response.status_code == 201
+    result = response.json()
+    assert result["model_id"] is None
+    assert "larger than storage allows" in result["model_error"]
+    # Training itself succeeded and the experiment is kept.
+    assert client.get(f"/experiments/{result['experiment_id']}", headers=alice).status_code == 200
+    assert client.get("/models", headers=alice).json() == []
+
+
+def test_successful_save_reports_no_model_error(client, alice):
+    dataset_id = upload(client, alice).json()["dataset_id"]
+    result = train(client, alice, dataset_id, save_model=True).json()
+    assert result["model_id"] is not None
+    assert result["model_error"] is None
+
+
+def id_column_csv(rows: int = 1200) -> str:
+    lines = ["student_id,hours,school,passed"]
+    for i in range(rows):
+        hours = (i * 7) % 11
+        lines.append(f"S{i:05d},{hours},{'public' if i % 3 else 'private'},{'yes' if hours > 5 else 'no'}")
+    return "\n".join(lines) + "\n"
+
+
+def test_id_like_categorical_column_is_rejected_before_training(client, alice):
+    dataset_id = upload(client, alice, csv=id_column_csv()).json()["dataset_id"]
+
+    response = train(
+        client, alice, dataset_id,
+        features=["student_id", "hours", "school"], categorical=["student_id", "school"],
+    )
+
+    assert response.status_code == 422
+    detail = response.json()["detail"]
+    assert "student_id" in detail and "1,200 distinct values" in detail
+    assert client.get("/experiments", headers=alice).json() == []  # nothing saved
+
+
+def test_same_dataset_trains_without_the_id_column(client, alice):
+    dataset_id = upload(client, alice, csv=id_column_csv()).json()["dataset_id"]
+    response = train(client, alice, dataset_id, features=["hours", "school"], categorical=["school"])
+    assert response.status_code == 201
+
+
+def test_inspect_reports_distinct_values(client, alice):
+    dataset_id = upload(client, alice, csv=id_column_csv(50)).json()["dataset_id"]
+    unique = client.get(f"/datasets/{dataset_id}/inspect", headers=alice).json()["unique_values"]
+    assert unique == {"student_id": 50, "hours": 11, "school": 2, "passed": 2}

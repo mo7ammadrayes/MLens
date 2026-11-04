@@ -27,7 +27,7 @@ export function ExperimentDetail() {
   const id = Number(useParams().experimentId);
   const navigate = useNavigate();
   const location = useLocation();
-  const flash = location.state as { justTrained?: boolean; modelId?: number | null } | null;
+  const flash = location.state as { justTrained?: boolean; modelId?: number | null; modelError?: string | null } | null;
   const { user } = useUser();
   const signedIn = !!useAuth().session;
 
@@ -102,7 +102,12 @@ export function ExperimentDetail() {
         }
       />
 
-      {flash?.justTrained && (
+      {flash?.justTrained && flash.modelError && (
+        <Alert tone="warning">
+          <strong>Training complete, but the model wasn't saved.</strong> {flash.modelError}
+        </Alert>
+      )}
+      {flash?.justTrained && !flash.modelError && (
         <Alert tone="success">
           Training complete.{" "}
           {flash.modelId ? (

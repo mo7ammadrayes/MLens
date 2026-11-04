@@ -37,3 +37,9 @@ def test_public_dataset_is_readable_signed_out_but_not_downloadable(client, alic
     assert client.get(f"/datasets/{dataset_id}").status_code == 200
     assert client.get(f"/datasets/{dataset_id}/preview").status_code == 200
     assert client.get(f"/datasets/{dataset_id}/download").status_code == 401
+
+
+def test_health_needs_no_sign_in_and_checks_the_database(client):
+    response = client.get("/health")
+    assert response.status_code == 200
+    assert response.json() == {"status": "ok", "database": "ok"}

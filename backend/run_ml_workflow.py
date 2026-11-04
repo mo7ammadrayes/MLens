@@ -33,6 +33,22 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 ARTIFACT_ROOT = PROJECT_ROOT / "artifacts"
 
 
+def model_storage_message(error: Exception, size_mb: float) -> str:
+    status = str(getattr(error, "status", ""))
+    if status == "413" or "exceeded the maximum allowed size" in str(error):
+        return (
+            f"The experiment was saved, but its model ({size_mb:.0f} MB) is "
+            "larger than storage allows, so it was not saved. Models grow "
+            "with many one-hot columns (for example ID or date columns) and "
+            "with many trees. Try fewer or lower-cardinality features, or "
+            "fewer estimators, then re-run with Save model."
+        )
+    return (
+        "The experiment was saved, but the model could not be stored "
+        "because of a storage error. Re-run with Save model to try again."
+    )
+
+
 def train_and_save_model(
     db: Session,
     dataset_id,
@@ -110,9 +126,11 @@ def train_and_save_model(
 
     experiment_id = saved_experiment.experiment_id
     model_id = None
+    model_error = None
 
     if persist_model:
         contents = serialize_model(model_pipeline)
+        size_mb = len(contents) / (1024 * 1024)
 
         bucket = "models"
         artifact_path = (
@@ -120,53 +138,65 @@ def train_and_save_model(
             f"experiment_{experiment_id}_{uuid4().hex}.joblib"
         )
 
-        upload_file(
-            bucket=bucket,
-            path=artifact_path,
-            contents=contents,
-            content_type="application/octet-stream",
-        )
-
         try:
-            saved_model = create_model(
-                db,
-                storage_bucket=bucket,
-                artifact_path=artifact_path,
-                experiment_id=experiment_id,
+            upload_file(
+                bucket=bucket,
+                path=artifact_path,
+                contents=contents,
+                content_type="application/octet-stream",
             )
-        except Exception:
-            # Registration failed after the file was uploaded.
-            # Save a cleanup task, then attempt cleanup immediately.
-            db.rollback()
-
+        except Exception as error:
+            # Training succeeded and the experiment is already saved; only
+            # storing the fitted model failed. Report it instead of a 500.
+            logger.exception(
+                "Could not store model for experiment %s (%.1f MB)",
+                experiment_id,
+                size_mb,
+            )
+            model_error = model_storage_message(error, size_mb)
+        else:
             try:
-                pending = PendingFileDeletion(
+                saved_model = create_model(
+                    db,
                     storage_bucket=bucket,
-                    storage_path=artifact_path,
+                    artifact_path=artifact_path,
+                    experiment_id=experiment_id,
                 )
-
-                db.add(pending)
-                db.flush()
-                deletion_id = pending.deletion_id
-                db.commit()
-
-                process_file_deletion(db, deletion_id)
             except Exception:
+                # Registration failed after the file was uploaded.
+                # Save a cleanup task, then attempt cleanup immediately.
                 db.rollback()
-                logger.exception(
-                    "Could not complete or register model cleanup: %s/%s",
-                    bucket,
-                    artifact_path,
-                )
 
-            raise
+                try:
+                    pending = PendingFileDeletion(
+                        storage_bucket=bucket,
+                        storage_path=artifact_path,
+                    )
 
-        model_id = saved_model.model_id
+                    db.add(pending)
+                    db.flush()
+                    deletion_id = pending.deletion_id
+                    db.commit()
+
+                    process_file_deletion(db, deletion_id)
+                except Exception:
+                    db.rollback()
+                    logger.exception(
+                        "Could not complete or register model cleanup: %s/%s",
+                        bucket,
+                        artifact_path,
+                    )
+
+                raise
+
+            model_id = saved_model.model_id
 
     return {
         "experiment_id": experiment_id,
         "model_id": model_id,
         "is_public": saved_experiment.is_public,
+        # Set when save_model was requested but the model could not be stored.
+        "model_error": model_error,
         "results": experiment["results"],
     }
 

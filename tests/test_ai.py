@@ -37,7 +37,7 @@ def test_dataset_explanation_sends_the_profile_not_the_rows(client, alice, gemin
     sent = gemini.calls[0]["context"]
     assert set(sent) == {
         "rows", "cols", "column_names", "column_types",
-        "missing_values", "total_missing_values", "duplicate_rows",
+        "missing_values", "unique_values", "total_missing_values", "duplicate_rows",
     }
 
 

@@ -1,7 +1,10 @@
+import logging
 import os
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
+from sqlalchemy import text
 
 # Register every ORM model with the shared metadata.
 import backend.database.models
@@ -38,3 +41,23 @@ app.include_router(experiment_router)
 app.include_router(model_router)
 app.include_router(prediction_router)
 app.include_router(explore_router)
+
+logger = logging.getLogger(__name__)
+
+
+@app.get("/health", tags=["Health"])
+def health():
+    """Liveness and database check for Docker and hosting platforms."""
+    from backend.database.session import engine
+
+    try:
+        with engine.connect() as connection:
+            connection.execute(text("SELECT 1"))
+    except Exception:
+        logger.exception("Health check: database unreachable")
+        return JSONResponse(
+            status_code=503,
+            content={"status": "error", "database": "unreachable"},
+        )
+
+    return {"status": "ok", "database": "ok"}

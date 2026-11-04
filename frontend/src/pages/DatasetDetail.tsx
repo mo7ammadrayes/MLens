@@ -22,6 +22,7 @@ import {
 import { useAuth, useUser } from "../context/AuthContext";
 import { OwnerBadge, VisibilityBadge, VisibilityToggle } from "../components/Visibility";
 import { useAction, useAsync } from "../hooks/useAsync";
+import { columnRisk } from "../lib/columnRisk";
 import { formatDate, formatInt, formatNumber, formatPercent, primaryMetric, type MetricDisplay } from "../lib/format";
 
 interface ExperimentRow {
@@ -294,6 +295,7 @@ function InspectionSection({ state }: { state: ReturnType<typeof useAsync<Datase
                 <th>#</th>
                 <th>Column</th>
                 <th>Type</th>
+                <th className="num">Distinct</th>
                 <th className="num">Missing</th>
                 <th className="bar-col">Completeness</th>
               </tr>
@@ -301,6 +303,7 @@ function InspectionSection({ state }: { state: ReturnType<typeof useAsync<Datase
             <tbody>
               {d.column_names.map((col, i) => {
                 const missing = d.missing_values[col] ?? 0;
+                const risk = columnRisk(d, col);
                 const complete = d.rows ? 1 - missing / d.rows : 1;
                 return (
                   <tr key={col}>
@@ -310,6 +313,10 @@ function InspectionSection({ state }: { state: ReturnType<typeof useAsync<Datase
                       <Badge tone={isNumericType(d.column_types[col]) ? "accent" : "neutral"}>
                         {d.column_types[col]}
                       </Badge>
+                    </td>
+                    <td className="num mono">
+                      {d.unique_values?.[col] !== undefined ? formatInt(d.unique_values[col]) : <span className="muted">—</span>}
+                      {risk && <div className="col-risk col-risk-table"><span className="col-risk-label">{risk.label}</span></div>}
                     </td>
                     <td className="num mono">{missing ? formatInt(missing) : <span className="muted">0</span>}</td>
                     <td className="bar-col">

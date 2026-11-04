@@ -34,6 +34,28 @@ from backend.services.model_options import (
     validate_model_parameters,
 )
 
+# One-hot encoding creates one column per category. Beyond this many in total,
+# the model gets huge (and usually overfits), typically because an ID, date or
+# free-text column was marked categorical.
+MAX_ONE_HOT_COLUMNS = 1000
+
+
+def check_one_hot_size(d, categorical) -> None:
+    levels = {column: int(d[column].nunique()) for column in categorical}
+    total = sum(levels.values())
+
+    if total <= MAX_ONE_HOT_COLUMNS:
+        return
+
+    worst = max(levels, key=levels.get)
+    raise ValueError(
+        f"The categorical features would create about {total:,} one-hot "
+        f"columns (limit {MAX_ONE_HOT_COLUMNS:,}). '{worst}' alone has "
+        f"{levels[worst]:,} distinct values, so it looks like an ID, date "
+        "or free-text column. Leave it out of the features."
+    )
+
+
 def serialize_model(model_pipeline) -> bytes:
     with BytesIO() as buffer:
         joblib.dump(model_pipeline, buffer)
@@ -146,6 +168,8 @@ def analysing_attempt(
 
     if d.empty:
         raise ValueError("No rows remain after data preparation")
+
+    check_one_hot_size(d, categorical)
 
     X = d[features]
     y = d[target]

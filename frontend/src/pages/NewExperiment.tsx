@@ -27,6 +27,7 @@ import { useAction, useAsync } from "../hooks/useAsync";
 import { formatInt } from "../lib/format";
 import type { ExperimentPrefill } from "../lib/prefill";
 import { isNumericType } from "./DatasetDetail";
+import { MAX_ONE_HOT_COLUMNS, columnRisk, oneHotColumns } from "../lib/columnRisk";
 
 function defaultsFor(options: ModelOptions | undefined, task: TaskType, algorithm: string) {
   const rules = options?.tasks[task]?.algorithms[algorithm]?.parameters ?? {};
@@ -123,9 +124,13 @@ export function NewExperiment() {
     setCategorical([]);
   }
 
+  // Columns that usually hurt a model (IDs, dates as text, too many categories).
+  const riskOf = (c: string) => (insp ? columnRisk(insp, c) : undefined);
+  const safeFeatures = (t: string) => columns.filter((c) => c !== t && !riskOf(c));
+
   function chooseTarget(t: string) {
     setTarget(t);
-    const feats = columns.filter((c) => c !== t);
+    const feats = safeFeatures(t);
     setFeatures(feats);
     setCategorical(feats.filter((c) => !isNumericType(dtype(c))));
     const tType = dtype(t) ?? "";
@@ -153,7 +158,13 @@ export function NewExperiment() {
       problems.push(`Target '${target}' has ${insp.missing_values[target]} missing values; clean the dataset first.`);
     if (taskType === "regression" && target && !isNumericType(dtype(target)))
       problems.push("Regression requires a numerical target.");
+    const encoded = oneHotColumns(insp, categorical.filter((c) => features.includes(c)));
+    if (encoded > MAX_ONE_HOT_COLUMNS)
+      problems.push(
+        `The categorical features would create about ${encoded.toLocaleString()} one-hot columns (limit ${MAX_ONE_HOT_COLUMNS.toLocaleString()}). Untick the flagged columns.`,
+      );
   }
+  const riskySelected = insp ? features.filter((c) => riskOf(c)) : [];
 
   async function submit(e: FormEvent) {
     e.preventDefault();
@@ -175,7 +186,7 @@ export function NewExperiment() {
     });
     if (response) {
       navigate(`/experiments/${response.experiment_id}`, {
-        state: { justTrained: true, modelId: response.model_id },
+        state: { justTrained: true, modelId: response.model_id, modelError: response.model_error },
       });
     }
   }
@@ -250,7 +261,7 @@ export function NewExperiment() {
             {insp && target && (
               <Card
                 title="2. Features"
-                description="Non-numeric columns must be encoded as categorical (one-hot)."
+                description="Non-numeric columns must be encoded as categorical (one-hot). Columns that usually hurt a model are flagged and left out by default."
                 actions={
                   <div className="row-gap">
                     <Button type="button" size="sm" variant="ghost" onClick={() => {
@@ -259,6 +270,13 @@ export function NewExperiment() {
                       setCategorical(all.filter((c) => !isNumericType(dtype(c))));
                     }}>
                       Select all
+                    </Button>
+                    <Button type="button" size="sm" variant="ghost" onClick={() => {
+                      const all = safeFeatures(target);
+                      setFeatures(all);
+                      setCategorical(all.filter((c) => !isNumericType(dtype(c))));
+                    }}>
+                      Select recommended
                     </Button>
                     <Button type="button" size="sm" variant="ghost" onClick={() => { setFeatures([]); setCategorical([]); }}>
                       Clear
@@ -282,12 +300,23 @@ export function NewExperiment() {
                       {columns.filter((c) => c !== target).map((c) => {
                         const selected = features.includes(c);
                         const numeric = isNumericType(dtype(c));
+                        const risk = riskOf(c);
                         return (
                           <tr key={c} className={selected ? "" : "row-muted"}>
                             <td>
                               <input type="checkbox" checked={selected} onChange={(e) => toggleFeature(c, e.target.checked)} aria-label={`Use ${c}`} />
                             </td>
-                            <td className="mono">{c}</td>
+                            <td>
+                              <span className="mono">{c}</span>
+                              {risk && (
+                                <div className={`col-risk ${selected ? "col-risk-on" : ""}`} title={risk.detail}>
+                                  <span className="col-risk-label">{risk.label}</span>
+                                  <span className="col-risk-detail">
+                                    {selected ? risk.detail : "Left out by default."}
+                                  </span>
+                                </div>
+                              )}
+                            </td>
                             <td><Badge tone={numeric ? "accent" : "neutral"}>{dtype(c)}</Badge></td>
                             <td className="num mono">{insp.missing_values[c] || <span className="muted">0</span>}</td>
                             <td>
@@ -397,6 +426,13 @@ export function NewExperiment() {
                   <option value="private">Private</option>
                 </select>
               </Field>
+              {riskySelected.length > 0 && problems.length === 0 && (
+                <div className="risk-note">
+                  <strong>Check {riskySelected.length === 1 ? "this feature" : "these features"}:</strong>{" "}
+                  {riskySelected.map((c) => `${c} (${riskOf(c)!.label.toLowerCase()})`).join(", ")}. They often make
+                  models larger and less accurate.
+                </div>
+              )}
               {problems.length > 0 && insp && (
                 <ul className="problems">
                   {problems.map((p) => <li key={p}>{p}</li>)}

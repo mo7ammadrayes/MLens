@@ -2,6 +2,12 @@
 
 **Discover, train, compare, and understand.**
 
+[![CI](https://github.com/mo7ammadrayes/csv-analyser/actions/workflows/ci.yml/badge.svg)](https://github.com/mo7ammadrayes/csv-analyser/actions/workflows/ci.yml)
+
+**Live demo:** [csv-analyser-eight.vercel.app](https://csv-analyser-eight.vercel.app) · **API docs:** [Swagger UI](https://mlens-api-799505986932.asia-northeast1.run.app/docs)
+
+> The API scales to zero when idle, so the first request after a quiet spell can take a few seconds.
+
 MLens is an end-to-end machine-learning experimentation platform. Upload a CSV (or start from a curated public dataset), train scikit-learn models, compare runs, read AI explanations grounded in the actual metrics, and use saved models to make predictions on new data.
 
 The ML pipeline is the source of truth. Gemini only explains results the pipeline has already produced; it never generates the metrics.
@@ -44,6 +50,7 @@ flowchart LR
 | ML | pandas, scikit-learn, joblib |
 | AI | Gemini via `google-genai`, structured JSON output validated with Pydantic |
 | Tests | pytest, FastAPI TestClient |
+| Delivery | Docker, GitHub Actions, Google Cloud Run (API), Vercel (frontend) |
 
 ## Project structure
 
@@ -113,7 +120,32 @@ pip install -r requirements-dev.txt
 pytest
 ```
 
-39 tests covering the critical flows: upload, training, model save/load, prediction, comparison, AI endpoint validation and access control. They run in a few seconds with no real services: SQLite instead of Postgres, in-memory storage, locally signed JWTs and a faked Gemini.
+45 tests covering the critical flows: upload, training, model save/load, prediction, comparison, AI endpoint validation and access control. They run in a few seconds with no real services: SQLite instead of Postgres, in-memory storage, locally signed JWTs and a faked Gemini.
+
+## CI
+
+Every push runs `.github/workflows/ci.yml`: three parallel jobs that run the pytest suite (Python 3.13), build the frontend (Node 22, `npm ci && npm run build`) and build the Docker image. The tests need no secrets.
+
+## Deployment
+
+| Part | Where | How |
+|---|---|---|
+| Frontend | Vercel (Hobby) | Root directory `frontend`; `vercel.json` rewrites all routes to `index.html`. Env: `VITE_API_BASE_URL`, `VITE_SUPABASE_URL`, `VITE_SUPABASE_PUBLISHABLE_KEY`. Redeploys on every push. |
+| API | Google Cloud Run (`asia-northeast1`, same region as the database) | Built from the `Dockerfile`; 1 vCPU, 1 GiB, scales 0 → 2 instances. |
+| Data, files, auth | Supabase | Postgres via the Session pooler (Cloud Run has no IPv6 route to the direct host). |
+
+Deploy or redeploy the API from the repo root (`.gcloudignore` keeps secrets, the venv, the frontend and tests out of the upload):
+
+```bash
+gcloud run deploy mlens-api --source . --region asia-northeast1 \
+  --allow-unauthenticated --memory 1Gi --cpu 1 \
+  --min-instances 0 --max-instances 2 --timeout 300 \
+  --env-vars-file ~/mlens-env.yaml
+```
+
+`~/mlens-env.yaml` lives outside the repo and holds `DATABASE_URL`, `SUPABASE_URL`, `SUPABASE_SECRET_KEY`, `GEMINI_API_KEY` and `CORS_ORIGINS` (the Vercel URL plus `http://localhost:5173`). In Supabase Auth, the Site URL and redirect URLs point at the Vercel domain.
+
+Costs stay at zero on the free tiers. Billing spend caps on Cloud Run and the Gemini API pause those services if a monthly limit is ever reached, and `--max-instances 2` bounds how far the API can scale.
 
 ## API overview
 
@@ -134,6 +166,7 @@ Full interactive docs are at `/docs`. Main groups:
 - Row-level security is enabled on all tables with no policies, so Supabase's public Data API can't read them. FastAPI connects directly as the table owner.
 - Signed-out visitors can only read public items. Uploads, training, downloads, predictions and every AI call require sign-in.
 - AI prompts receive dataset profiles and metrics, never raw dataset rows.
+- The API container runs as a non-root user, and `/health` checks the database connection.
 
 ## Licence of bundled data
 

@@ -8,6 +8,8 @@
 
 > The API scales to zero when idle, so the first request after a quiet spell can take a few seconds.
 
+![MLens landing page](docs/screenshots/landing.png)
+
 MLens is an end-to-end machine-learning experimentation platform. Upload a CSV (or start from a curated public dataset), train scikit-learn models, compare runs, read AI explanations grounded in the actual metrics, and use saved models to make predictions on new data.
 
 The ML pipeline is the source of truth. Gemini only explains results the pipeline has already produced; it never generates the metrics.
@@ -25,6 +27,17 @@ Discover → Dataset → Experiment → Model → Prediction
 - **AI, in context:** explain a dataset, explain results, explain a comparison, suggest the next experiment. Suggestions are validated against the supported algorithms and parameter ranges before they're shown. AI needs sign-in.
 - **Models and predictions:** save the fitted pipeline (joblib), run it on new data, and download predictions as CSV. Public models can be used by other signed-in users on their own data.
 - **Auth and ownership:** Supabase Auth. Every request is checked on the server; private items return 404 to anyone else.
+
+## Screenshots
+
+| | |
+|---|---|
+| ![Discover curated datasets](docs/screenshots/discover.png) | ![Dataset page with source and data preview](docs/screenshots/dataset.png) |
+| **Discover:** curated public datasets, no account needed | **Dataset:** description, source, licence and a data preview |
+| ![Column profile and example experiments](docs/screenshots/dataset-profile.png) | ![New experiment form flagging an ID column](docs/screenshots/new-experiment.png) |
+| **Profile:** column types, distinct values, missing data and example runs | **Train:** feature selection that flags ID-like and risky columns |
+| ![Experiment results with AI explanation](docs/screenshots/experiment.png) | ![Comparing three experiments with AI explanation](docs/screenshots/compare.png) |
+| **Results:** test-set metrics, per-class report and an AI explanation grounded in them | **Compare:** best value per metric highlighted, plus an AI explanation of the trade-offs |
 
 ## Architecture
 
